@@ -10,7 +10,8 @@ import (
 
 type mensagem struct {
 	tipo  int    // tipo da mensagem para fazer o controle do que fazer (eleição, confirmacao da eleicao)
-	corpo [3]int // conteudo da mensagem para colocar os ids (usar um tamanho compativel com o numero de processos no anel)
+	corpo [4]int // conteudo da mensagem para colocar os ids (usar um tamanho compativel com o numero de processos no anel)
+	falho bool
 }
 
 var (
@@ -30,37 +31,67 @@ func ElectionControler(in chan int) {
 
 	var temp mensagem
 
-	// mudar o processo 0 - canal de entrada 3 - para falho (defini mensagem tipo 1 pra isto)
+	// mudar o processo do tipo 0 para falho (mensagem tipo 1)
 	temp.tipo = 1
-	chans[2] <- temp
-	fmt.Printf("Controle: mudar o processo 3 para falho\n")
+	temp.falho = true
+	chans[3] <- temp
+	fmt.Printf("\nControle: mudar o processo 0 para falho\n")
 	fmt.Printf("Controle: confirmação %d\n", <-in) // receber e imprimir confirmação
 
-	// fazendo eleição pra novo líder
+	// mandando processo 1 fazer eleição pra novo líder (mensagem tipo 2)
 	temp.tipo = 2
-	chans[3] <- temp
-	fmt.Printf("Controle: processo 1 dispara eleição, eleição é feita e concluída, processos são avisados\n")
+	temp.falho = true
+	chans[0] <- temp
+	fmt.Printf("\nControle: processo 1 dispara eleição, eleição é feita e concluída, processos são avisados\n")
 	actualLeader := <-in
 	fmt.Printf("Controle: confirmação %d\n", actualLeader) // receber e imprimir confirmação
 
-	// voltando o processo 3
+	// voltando o processo 0 (mensagem de tipo 6)
 	temp.tipo = 6
+	temp.falho = false
 	temp.corpo[0] = actualLeader
+	chans[3] <- temp
+	fmt.Printf("\nControle: mudar o processo 0 para funcional\n")
+	confirmacao := <-in
+	fmt.Printf("Controle: confirmação mudar processo 0 %d\n", confirmacao) // receber e imprimir confirmação
+
+	// mandando o processo 1 fazer nova eleição para líder (mensagem tipo 2)
+	temp.tipo = 2
+	chans[0] <- temp
+	fmt.Printf("\nControle: processo 1 dispara eleição, eleição é feita e concluída, processos são avisados\n")
+	actualLeader = <-in
+	fmt.Printf("Controle: confirmação dispara nova eleição %d\n", actualLeader) // receber e imprimir confirmação
+
+	// mudar o processo 3 para falho (mensagem tipo 1)
+	temp.tipo = 1
+	temp.falho = true
 	chans[2] <- temp
-	fmt.Printf("Controle: mudar o processo 3 para funcional\n")
+	fmt.Printf("\nControle: mudar o processo 3 para falho\n")
 	fmt.Printf("Controle: confirmação %d\n", <-in) // receber e imprimir confirmação
 
-	// temp.tipo = 2
-	// chans[3] <- temp
-	// fmt.Printf("Controle: processo 1 dispara eleição, eleição é feita e concluída, processos são avisados\n")
-	// fmt.Printf("Controle: confirmação %d\n", <-in) // receber e imprimir confirmação
+	// mandando processo 0 fazer eleição pra novo líder (mensagem tipo 2)
+	temp.tipo = 2
+	temp.falho = true
+	chans[3] <- temp
+	fmt.Printf("\nControle: processo 0 dispara eleição, eleição é feita e concluída, processos são avisados\n")
+	actualLeader = <-in
+	fmt.Printf("Controle: confirmação %d\n", actualLeader) // receber e imprimir confirmação
 
-	// mudar o processo 1 - canal de entrada 0 - para falho (defini mensagem tipo 2 pra isto)
+	// voltando o processo 3 (mensagem de tipo 6)
+	temp.tipo = 6
+	temp.falho = false
+	// temp.corpo[0] = actualLeader
+	chans[2] <- temp
+	fmt.Printf("\nControle: mudar o processo 3 para funcional\n")
+	confirmacao = <-in
+	fmt.Printf("Controle: confirmação mudar processo 3 %d\n", confirmacao) // receber e imprimir confirmação
 
-	// temp.tipo = 2
-	// chans[0] <- temp
-	// fmt.Printf("Controle: mudar o processo 1 para falho\n")
-	// fmt.Printf("Controle: confirmação %d\n", <-in) // receber e imprimir confirmação
+	// mandando o processo 0 fazer nova eleição para líder (mensagem tipo 2)
+	temp.tipo = 2
+	chans[3] <- temp
+	fmt.Printf("\nControle: processo 0 dispara eleição, eleição é feita e concluída, processos são avisados\n")
+	actualLeader = <-in
+	fmt.Printf("Controle: confirmação dispara nova eleição %d\n", actualLeader) // receber e imprimir confirmação
 
 	// matar os outros processos
 	temp.tipo = 7
@@ -89,7 +120,7 @@ func ElectionStage(TaskId int, in chan mensagem, out chan mensagem, leader int) 
 	for {
 		select {
 		case temp := <-in:
-			fmt.Printf("%2d: recebi mensagem %d, [ %d, %d, %d ]\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2])
+			// fmt.Printf("%2d: recebi mensagem %d, [ %d, %d, %d, %d ], falho: %v\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2], temp.corpo[3], temp.falho)
 
 			switch temp.tipo {
 			case 1: //processo líder falha
@@ -101,22 +132,35 @@ func ElectionStage(TaskId int, in chan mensagem, out chan mensagem, leader int) 
 				}
 			case 2: //quem dispara a eleição -> disparando a eleição
 				{
-					fmt.Printf("%2d: disparando a eleição\n", TaskId)
+					// fmt.Printf("%2d: disparando a eleição\n", TaskId)
 
+					// temp.falho = !temp.falho
 					temp.tipo = 3
-					for i := 0; i < 3; i++ {
+
+					for i := 0; i < 4; i++ {
 						temp.corpo[i] = -1
 					}
 
 					temp.corpo[0] = TaskId
+
+					fmt.Printf("%2d: disparando eleição case %d, [ %d, %d, %d, %d ], falho: %v\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2], temp.corpo[3], temp.falho)
+
 					out <- temp
 				}
 			case 3: //fazendo uma eleição -> votação
 				{
 					// fmt.Printf("CASE 3 - %2d: recebi mensagem %d, [ %d, %d, %d ]\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2])
 
+					var nProcessos int
+
+					if temp.falho == true {
+						nProcessos = 3
+					} else {
+						nProcessos = 4
+					}
+
 					if bFailed == false {
-						for i := 0; i < 3; i++ {
+						for i := 0; i < nProcessos; i++ {
 							if temp.corpo[i] == -1 {
 								temp.corpo[i] = TaskId
 								break
@@ -128,17 +172,17 @@ func ElectionStage(TaskId int, in chan mensagem, out chan mensagem, leader int) 
 
 					var cont int
 					cont = 0
-					for i := 0; i < 3; i++ {
+					for i := 0; i < nProcessos; i++ {
 						if temp.corpo[i] != -1 {
 							cont++
 						}
 					}
 
-					if cont == 3 {
+					if cont == nProcessos {
 						temp.tipo = 5
 					}
 
-					fmt.Printf("fazendo uma eleição - %2d: envia mensagem %d, [ %d, %d, %d ]\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2])
+					fmt.Printf("fazendo uma eleição - %2d: envia mensagem tipo %d, [ %d, %d, %d, %d ]\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2], temp.corpo[3])
 
 					out <- temp
 
@@ -148,27 +192,50 @@ func ElectionStage(TaskId int, in chan mensagem, out chan mensagem, leader int) 
 				{
 					actualLeader = temp.corpo[0]
 
-					if temp.corpo[2] == temp.corpo[1] {
-						//parar de mandar mensagem desse tipo
-						//avisar o controle quem é o líder atual
-						controle <- actualLeader
-					} else if temp.corpo[1] == temp.corpo[0] {
-						temp.corpo[2] = actualLeader
-						out <- temp
+					var nProcessos int
+					if temp.falho == true {
+						nProcessos = 3
 					} else {
-						temp.corpo[1] = actualLeader
-						out <- temp
+						nProcessos = 4
+					}
+
+					count := 1
+					for i := 1; i < nProcessos; i++ {
+						count++
+
+						if temp.corpo[i] != actualLeader && TaskId != actualLeader {
+							temp.corpo[i] = actualLeader
+							if count != nProcessos {
+								out <- temp
+							}
+							break
+						} else if TaskId == actualLeader && temp.falho == false {
+							out <- temp
+							break
+						}
+					}
+
+					if count == nProcessos {
+						controle <- actualLeader
 					}
 
 					fmt.Printf("%2d: O meu líder é o %d\n", TaskId, actualLeader)
+
 				}
 			case 5: //decide quem ganha a eleição e começa a avisar quem ganhou a eleição
 				{
-					fmt.Printf("CASE 5 - %2d: envia mensagem %d, [ %d, %d, %d ]\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2])
+					// fmt.Printf("CASE 5 - %2d: envia mensagem %d, [ %d, %d, %d, %d ]\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2], temp.corpo[3])
+
+					var nProcessos int
+					if temp.falho {
+						nProcessos = 3
+					} else {
+						nProcessos = 4
+					}
 
 					if bFailed == false {
 						ganhador := -1
-						for i := 0; i < 3; i++ {
+						for i := 0; i < nProcessos; i++ {
 							if temp.corpo[i] > ganhador {
 								ganhador = temp.corpo[i]
 							}
@@ -177,10 +244,12 @@ func ElectionStage(TaskId int, in chan mensagem, out chan mensagem, leader int) 
 						actualLeader = ganhador
 
 						temp.corpo[0] = actualLeader
+
 						temp.tipo = 4
 
-						fmt.Printf("CASE 5 - %2d: o processo ganhador foi o %d\n", TaskId, actualLeader)
+						fmt.Printf("%2d: o processo ganhador foi o %d\n", TaskId, actualLeader)
 						fmt.Printf("%2d: O meu líder é o %d\n", TaskId, actualLeader)
+						fmt.Printf("CASE 5 - %2d: teste %d, [ %d, %d, %d, %d ]\n", TaskId, temp.tipo, temp.corpo[0], temp.corpo[1], temp.corpo[2], temp.corpo[3])
 					}
 
 					out <- temp
@@ -188,7 +257,7 @@ func ElectionStage(TaskId int, in chan mensagem, out chan mensagem, leader int) 
 			case 6: //fazer processo voltar
 				{
 					bFailed = false
-					actualLeader = temp.corpo[0]
+					// actualLeader = temp.corpo[0]
 					controle <- 6
 				}
 			case 7: //matar os processos
